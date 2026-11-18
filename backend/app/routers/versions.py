@@ -62,7 +62,7 @@ def create_run(version_id: int, payload: RunCreate, db: Session = Depends(get_db
     cases = generate_tests(_parsed(version))
     if payload.categories:
         cases = [c for c in cases if c.category in payload.categories]
-    report = run_tests(cases, str(payload.base_url), timeout=settings.runner_timeout_seconds)
+    report = run_tests(cases, str(payload.base_url).rstrip("/"), timeout=settings.runner_timeout_seconds)
     run = TestRun(spec_version_id=version.id, base_url=report["base_url"], total=report["total"],
                   passed=report["passed"], results=report["results"])
     db.add(run)
