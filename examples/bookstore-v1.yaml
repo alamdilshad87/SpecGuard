@@ -1,0 +1,108 @@
+openapi: 3.0.3
+info:
+  title: Bookstore API
+  version: 1.0.0
+servers:
+  - url: http://localhost:9000
+paths:
+  /books:
+    get:
+      operationId: listBooks
+      summary: List books
+      tags: [books]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: genre
+          in: query
+          schema:
+            type: string
+            enum: [fiction, science, history]
+      responses:
+        "200":
+          description: A list of books
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Book"
+    post:
+      operationId: createBook
+      summary: Create a book
+      tags: [books]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewBook"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "400":
+          description: Invalid input
+  /books/{bookId}:
+    parameters:
+      - name: bookId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: getBook
+      summary: Get a book by id
+      tags: [books]
+      responses:
+        "200":
+          description: The book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteBook
+      summary: Delete a book
+      tags: [books]
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+components:
+  schemas:
+    NewBook:
+      type: object
+      required: [title, author]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        author:
+          type: string
+        price:
+          type: number
+          minimum: 0
+        genre:
+          type: string
+          enum: [fiction, science, history]
+    Book:
+      allOf:
+        - $ref: "#/components/schemas/NewBook"
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: integer
