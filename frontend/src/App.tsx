@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, Project } from "./api";
+import DiffView from "./components/DiffView";
+import DocsView from "./components/DocsView";
 import Sidebar from "./components/Sidebar";
 import UploadVersion from "./components/UploadVersion";
+
+type Tab = "docs" | "diff";
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [versionId, setVersionId] = useState<number | null>(null);
+  const [tab, setTab] = useState<Tab>("docs");
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -23,17 +29,25 @@ export default function App() {
     refresh();
   }, [refresh]);
 
+  const project = projects.find((p) => p.id === selectedId) ?? null;
+
+  // Keep a valid version selected when the project or its versions change.
+  useEffect(() => {
+    if (!project) return setVersionId(null);
+    if (!project.versions.some((v) => v.id === versionId)) {
+      setVersionId(project.versions.at(-1)?.id ?? null);
+    }
+  }, [project, versionId]);
+
   async function createProject(name: string) {
     try {
-      const project = await api.createProject(name);
+      const created = await api.createProject(name);
       await refresh();
-      setSelectedId(project.id);
+      setSelectedId(created.id);
     } catch (err) {
       setError((err as Error).message);
     }
   }
-
-  const project = projects.find((p) => p.id === selectedId) ?? null;
 
   return (
     <div className="app">
@@ -61,7 +75,8 @@ export default function App() {
                     </thead>
                     <tbody>
                       {project.versions.map((v) => (
-                        <tr key={v.id}>
+                        <tr key={v.id} className={`clickable ${v.id === versionId ? "selected" : ""}`}
+                            onClick={() => setVersionId(v.id)}>
                           <td><strong>{v.label}</strong></td>
                           <td>{v.title}</td>
                           <td>{v.openapi}</td>
@@ -73,6 +88,17 @@ export default function App() {
                   </table>
                 )}
               </section>
+
+              {project.versions.length > 0 && (
+                <section className="panel">
+                  <nav className="tabs">
+                    <button className={tab === "docs" ? "on" : ""} onClick={() => setTab("docs")}>Docs</button>
+                    <button className={tab === "diff" ? "on" : ""} onClick={() => setTab("diff")}>Breaking changes</button>
+                  </nav>
+                  {tab === "docs" && versionId != null && <DocsView versionId={versionId} />}
+                  {tab === "diff" && <DiffView versions={project.versions} />}
+                </section>
+              )}
             </>
           )}
         </main>

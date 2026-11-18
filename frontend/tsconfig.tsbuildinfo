@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/api.ts","./src/main.tsx","./src/components/Sidebar.tsx","./src/components/UploadVersion.tsx"],"version":"5.9.3"}
+{"root":["./src/App.tsx","./src/api.ts","./src/main.tsx","./src/components/DiffView.tsx","./src/components/DocsView.tsx","./src/components/Sidebar.tsx","./src/components/UploadVersion.tsx"],"version":"5.9.3"}
