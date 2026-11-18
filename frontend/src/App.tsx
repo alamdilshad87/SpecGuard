@@ -3,9 +3,10 @@ import { api, Project } from "./api";
 import DiffView from "./components/DiffView";
 import DocsView from "./components/DocsView";
 import Sidebar from "./components/Sidebar";
+import TestsView from "./components/TestsView";
 import UploadVersion from "./components/UploadVersion";
 
-type Tab = "docs" | "diff";
+type Tab = "docs" | "tests" | "diff";
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -93,9 +94,11 @@ export default function App() {
                 <section className="panel">
                   <nav className="tabs">
                     <button className={tab === "docs" ? "on" : ""} onClick={() => setTab("docs")}>Docs</button>
+                    <button className={tab === "tests" ? "on" : ""} onClick={() => setTab("tests")}>Tests</button>
                     <button className={tab === "diff" ? "on" : ""} onClick={() => setTab("diff")}>Breaking changes</button>
                   </nav>
                   {tab === "docs" && versionId != null && <DocsView versionId={versionId} />}
+                  {tab === "tests" && versionId != null && <TestsView versionId={versionId} />}
                   {tab === "diff" && <DiffView versions={project.versions} />}
                 </section>
               )}

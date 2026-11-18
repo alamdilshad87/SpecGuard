@@ -109,3 +109,7 @@ code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; 
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 .error { color: var(--breaking); }
+
+.check { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; text-transform: capitalize; color: var(--muted); }
+.panel.inset { background: var(--bg); }
+details pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 12px; max-width: 420px; overflow-x: auto; }
