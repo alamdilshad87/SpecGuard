@@ -67,6 +67,59 @@ export interface TestRun {
   results: TestResult[];
 }
 
+export interface LintIssue {
+  level: "error" | "warning";
+  location: string;
+  message: string;
+}
+
+export interface LintReport {
+  valid: boolean;
+  summary: Record<LintIssue["level"], number>;
+  issues: LintIssue[];
+}
+
+export interface CodeRoute {
+  key: string;
+  method: string;
+  path: string;
+  file: string;
+  line: number;
+  handler: string;
+  doc: string;
+}
+
+export interface DriftReport {
+  in_sync: boolean;
+  summary: { matched: number; undocumented: number; unimplemented: number };
+  matched: { operation: string; route: CodeRoute }[];
+  undocumented_in_spec: CodeRoute[];
+  not_implemented_in_code: { operation: string; operation_id: string }[];
+  warnings?: string[];
+}
+
+export interface CodeScan {
+  id: number;
+  spec_version_id: number;
+  files_scanned: number;
+  in_sync: boolean;
+  created_at: string;
+  report: DriftReport;
+}
+
+export interface AskSource {
+  id: string;
+  title: string;
+  source: "operation" | "code";
+  score: number;
+}
+
+export interface AskResult {
+  answer: string;
+  mode: "llm" | "extractive" | "none";
+  sources: AskSource[];
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);
   if (!res.ok) {
@@ -106,4 +159,13 @@ export const api = {
     request<TestRun>(`/versions/${versionId}/runs`, json({ base_url: baseUrl, categories })),
   runs: (versionId: number) => request<TestRun[]>(`/versions/${versionId}/runs`),
   diff: (fromId: number, toId: number) => request<DiffResult>(`/diff?from=${fromId}&to=${toId}`),
+  lint: (versionId: number) => request<LintReport>(`/versions/${versionId}/lint`),
+  scans: (versionId: number) => request<CodeScan[]>(`/versions/${versionId}/scans`),
+  scan: (versionId: number, files: File[]) => {
+    const form = new FormData();
+    files.forEach((f) => form.append("files", f));
+    return request<CodeScan>(`/versions/${versionId}/scans`, { method: "POST", body: form });
+  },
+  ask: (versionId: number, question: string, useLlm = true) =>
+    request<AskResult>(`/versions/${versionId}/ask`, json({ question, use_llm: useLlm })),
 };
