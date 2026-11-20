@@ -91,7 +91,7 @@ Create a project, upload `examples/bookstore-v1.yaml` and `bookstore-v2.yaml`, t
 - **Docs**: generated reference for the selected version
 - **Breaking changes**: v1 → v2 reports 9 breaking changes (removed `DELETE`, new required `storeId`, `limit` max lowered, `bookId` type change, …)
 - **Tests**: run the 25 generated cases for v1 against `http://localhost:9000`
-- **Drift**: scan `examples/mock_bookstore.py` (FastAPI) or `examples/BookstoreApi/BooksController.cs` (ASP.NET Core) against v2: `DELETE /books/{bookId}` is undocumented and `GET /authors` is not implemented
+- **Drift**: scan `examples/mock_bookstore.py` (FastAPI) or `examples/BookstoreApi/BooksController.cs` (ASP.NET Core) against v2: the `DELETE` book route is undocumented and `GET /authors` is not implemented
 
 ![Test run](docs/screenshots/tests.png)
 
