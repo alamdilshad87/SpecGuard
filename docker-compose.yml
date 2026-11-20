@@ -17,6 +17,10 @@ services:
     environment:
       SPECGUARD_DATABASE_URL: postgresql+psycopg2://specguard:specguard@db:5432/specguard
       SPECGUARD_CORS_ORIGINS: '["http://localhost:5173"]'
+      # Optional: any OpenAI-compatible chat API for /versions/{id}/ask (empty = offline answers)
+      SPECGUARD_LLM_BASE_URL: ${SPECGUARD_LLM_BASE_URL:-}
+      SPECGUARD_LLM_API_KEY: ${SPECGUARD_LLM_API_KEY:-}
+      SPECGUARD_LLM_MODEL: ${SPECGUARD_LLM_MODEL:-}
     ports:
       - "8000:8000"
     depends_on:

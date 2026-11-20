@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import models  # noqa: F401  (registers tables)
 from app.config import settings
 from app.database import Base, engine
-from app.routers import projects, versions
+from app.routers import insights, projects, versions
 
 
 @asynccontextmanager
@@ -17,7 +17,8 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    description="Analyze OpenAPI specs: docs, breaking-change detection and generated API tests.",
+    description="Analyze OpenAPI specs: docs, linting, breaking-change detection, generated API tests, "
+                "code-vs-spec drift detection and grounded Q&A.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -31,6 +32,7 @@ app.add_middleware(
 
 app.include_router(projects.router)
 app.include_router(versions.router)
+app.include_router(insights.router)
 
 
 @app.get("/health", tags=["meta"])
