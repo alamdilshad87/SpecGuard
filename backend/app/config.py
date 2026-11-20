@@ -10,5 +10,12 @@ class Settings(BaseSettings):
     # Upper bound for requests the test runner sends to a target API
     runner_timeout_seconds: float = 10.0
 
+    # Optional LLM for the /ask endpoint: any OpenAI-compatible chat completions API.
+    # Leave base URL or model empty to use extractive (offline) answers.
+    llm_base_url: str = ""
+    llm_api_key: str = ""
+    llm_model: str = ""
+    llm_timeout_seconds: float = 30.0
+
 
 settings = Settings()

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -37,6 +37,7 @@ class SpecVersion(Base):
 
     project: Mapped[Project] = relationship(back_populates="versions")
     runs: Mapped[list["TestRun"]] = relationship(back_populates="spec_version", cascade="all, delete-orphan")
+    scans: Mapped[list["CodeScan"]] = relationship(back_populates="spec_version", cascade="all, delete-orphan")
 
 
 class TestRun(Base):
@@ -51,3 +52,19 @@ class TestRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     spec_version: Mapped[SpecVersion] = relationship(back_populates="runs")
+
+
+class CodeScan(Base):
+    """Routes found in uploaded source code and how they compare with a spec version."""
+
+    __tablename__ = "code_scans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    spec_version_id: Mapped[int] = mapped_column(ForeignKey("spec_versions.id", ondelete="CASCADE"), index=True)
+    files_scanned: Mapped[int] = mapped_column(Integer)
+    in_sync: Mapped[bool] = mapped_column(Boolean)
+    routes: Mapped[list] = mapped_column(JSON)
+    report: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    spec_version: Mapped[SpecVersion] = relationship(back_populates="scans")

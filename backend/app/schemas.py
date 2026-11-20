@@ -72,3 +72,37 @@ class RunOut(BaseModel):
 class DiffRequest(BaseModel):
     old: str = Field(min_length=1)
     new: str = Field(min_length=1)
+
+
+class LintRequest(BaseModel):
+    content: str = Field(min_length=1, description="OpenAPI 3.x document as JSON or YAML text")
+
+
+class ScanOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    spec_version_id: int
+    files_scanned: int
+    in_sync: bool
+    created_at: datetime
+    report: dict[str, Any]
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    k: int = Field(default=4, ge=1, le=20, description="How many chunks to retrieve")
+    use_llm: bool = True
+
+
+class AskSource(BaseModel):
+    id: str
+    title: str
+    source: Literal["operation", "code"]
+    score: float
+
+
+class AskOut(BaseModel):
+    answer: str
+    mode: Literal["llm", "extractive", "none"]
+    sources: list[AskSource]
