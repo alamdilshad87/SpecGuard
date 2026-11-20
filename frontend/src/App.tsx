@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, Project } from "./api";
+import AskView from "./components/AskView";
 import DiffView from "./components/DiffView";
 import DocsView from "./components/DocsView";
+import DriftView from "./components/DriftView";
+import LintView from "./components/LintView";
 import Sidebar from "./components/Sidebar";
 import TestsView from "./components/TestsView";
 import UploadVersion from "./components/UploadVersion";
 
-type Tab = "docs" | "tests" | "diff";
+type Tab = "docs" | "lint" | "tests" | "diff" | "drift" | "ask";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "docs", label: "Docs" },
+  { id: "lint", label: "Lint" },
+  { id: "tests", label: "Tests" },
+  { id: "diff", label: "Breaking changes" },
+  { id: "drift", label: "Code drift" },
+  { id: "ask", label: "Ask" },
+];
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -54,7 +66,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <h1>SpecGuard</h1>
-        <span className="tagline">OpenAPI docs, breaking-change detection and generated tests</span>
+        <span className="tagline">OpenAPI docs, linting, breaking changes, generated tests, code drift and Q&amp;A</span>
       </header>
       <div className="layout">
         <Sidebar projects={projects} selectedId={selectedId} onSelect={setSelectedId} onCreate={createProject} />
@@ -93,13 +105,16 @@ export default function App() {
               {project.versions.length > 0 && (
                 <section className="panel">
                   <nav className="tabs">
-                    <button className={tab === "docs" ? "on" : ""} onClick={() => setTab("docs")}>Docs</button>
-                    <button className={tab === "tests" ? "on" : ""} onClick={() => setTab("tests")}>Tests</button>
-                    <button className={tab === "diff" ? "on" : ""} onClick={() => setTab("diff")}>Breaking changes</button>
+                    {TABS.map((t) => (
+                      <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>{t.label}</button>
+                    ))}
                   </nav>
                   {tab === "docs" && versionId != null && <DocsView versionId={versionId} />}
                   {tab === "tests" && versionId != null && <TestsView versionId={versionId} />}
                   {tab === "diff" && <DiffView versions={project.versions} />}
+                  {tab === "lint" && versionId != null && <LintView versionId={versionId} />}
+                  {tab === "drift" && versionId != null && <DriftView versionId={versionId} />}
+                  {tab === "ask" && versionId != null && <AskView versionId={versionId} />}
                 </section>
               )}
             </>

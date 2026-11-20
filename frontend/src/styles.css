@@ -84,13 +84,14 @@ tr.selected td { background: rgba(109, 140, 255, 0.08); }
 .verdict { padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; font-weight: 500; }
 .verdict.bad { background: rgba(255, 93, 108, 0.12); color: var(--breaking); }
 .verdict.good { background: rgba(60, 207, 142, 0.12); color: var(--pass); }
+.verdict.warn { background: rgba(245, 181, 68, 0.12); color: var(--warning); }
 
 .chips { margin-bottom: 12px; }
 .chip { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 4px 10px; font-size: 13px; text-transform: capitalize; }
 .chip.on { border-color: var(--accent); background: rgba(109, 140, 255, 0.12); }
 
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; text-transform: capitalize; }
-.badge.breaking, .badge.fail { background: rgba(255, 93, 108, 0.15); color: var(--breaking); }
+.badge.breaking, .badge.fail, .badge.error { background: rgba(255, 93, 108, 0.15); color: var(--breaking); }
 .badge.warning { background: rgba(245, 181, 68, 0.15); color: var(--warning); }
 .badge.info, .badge.edge { background: rgba(92, 200, 255, 0.15); color: var(--info); }
 .badge.positive, .badge.pass { background: rgba(60, 207, 142, 0.15); color: var(--pass); }
@@ -113,3 +114,8 @@ code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; 
 .check { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; text-transform: capitalize; color: var(--muted); }
 .panel.inset { background: var(--bg); }
 details pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 12px; max-width: 420px; overflow-x: auto; }
+
+.grow { flex: 1; min-width: 240px; }
+.chip.plain { text-transform: none; }
+.warn-text { color: var(--warning); margin: 0 0 12px; }
+.answer { white-space: pre-wrap; line-height: 1.55; margin: 8px 0 12px; }
