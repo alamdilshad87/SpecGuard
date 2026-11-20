@@ -1,7 +1,10 @@
 import io
 import zipfile
 
+from app.config import settings
+from app.core.codescan import Route
 from app.routers import insights
+from app.services.csharp_scanner import CSharpScannerError
 from tests.conftest import EXAMPLES
 
 DOCUMENTED_APP = '''
@@ -100,3 +103,71 @@ def test_ask_uses_spec_and_scanned_docstrings(client, spec_v1):
 
     assert client.post(url, json={"question": ""}).status_code == 422
     assert client.post("/versions/9999/ask", json={"question": "x"}).status_code == 404
+
+
+# ---------------------------------------------------------------- C# via the .NET scanner
+
+CS_CONTROLLER = (EXAMPLES / "BookstoreApi" / "BooksController.cs").read_bytes()
+CS_ROUTES = [
+    Route("get", "/books", "BooksController.cs", 24, "BooksController.List", "List books, optionally filtered by genre."),
+    Route("post", "/books", "BooksController.cs", 32, "BooksController.Create", ""),
+    Route("get", "/books/{bookId}", "BooksController.cs", 41, "BooksController.Get", ""),
+    Route("delete", "/books/{bookId}", "BooksController.cs", 46, "BooksController.Delete", ""),
+]
+
+
+def _cs_upload(*extra):
+    return [("files", ("BooksController.cs", CS_CONTROLLER, "text/plain")), *extra]
+
+
+def test_csharp_files_are_scanned_by_the_dotnet_service(client, spec_v2, monkeypatch):
+    calls = []
+
+    def fake_scan(files, base_url, timeout):
+        calls.append((sorted(files), base_url))
+        return CS_ROUTES
+
+    monkeypatch.setattr(settings, "csharp_scanner_url", "http://scanner:8080")
+    monkeypatch.setattr(insights, "scan_csharp", fake_scan)
+    version = _version(client, spec_v2, "v2")
+
+    scan = client.post(f"/versions/{version['id']}/scans", files=_cs_upload()).json()
+
+    assert calls == [(["BooksController.cs"], "http://scanner:8080")]
+    assert scan["report"]["summary"] == {"matched": 3, "undocumented": 1, "unimplemented": 1}
+    assert scan["report"]["warnings"] == []
+
+    answer = client.post(f"/versions/{version['id']}/ask", json={"question": "filter books by genre", "use_llm": False}).json()
+    assert any(s["source"] == "code" for s in answer["sources"])
+
+
+def test_mixed_upload_survives_scanner_outage(client, spec_v1, monkeypatch):
+    def failing_scan(files, base_url, timeout):
+        raise CSharpScannerError("C# scanner unreachable: ConnectError")
+
+    monkeypatch.setattr(settings, "csharp_scanner_url", "http://scanner:8080")
+    monkeypatch.setattr(insights, "scan_csharp", failing_scan)
+    version = _version(client, spec_v1)
+
+    scan = client.post(f"/versions/{version['id']}/scans",
+                       files=_cs_upload(("files", ("app.py", DOCUMENTED_APP.encode(), "text/x-python")))).json()
+
+    assert scan["in_sync"] is True  # the Python routes alone cover the spec
+    assert scan["report"]["warnings"] == ["Skipped 1 C# file(s): C# scanner unreachable: ConnectError"]
+
+
+def test_csharp_only_upload_needs_a_working_scanner(client, spec_v1, monkeypatch):
+    version = _version(client, spec_v1)
+    url = f"/versions/{version['id']}/scans"
+
+    monkeypatch.setattr(settings, "csharp_scanner_url", "")
+    assert client.post(url, files=_cs_upload()).status_code == 503
+
+    def failing_scan(files, base_url, timeout):
+        raise CSharpScannerError("C# scanner returned HTTP 500")
+
+    monkeypatch.setattr(settings, "csharp_scanner_url", "http://scanner:8080")
+    monkeypatch.setattr(insights, "scan_csharp", failing_scan)
+    response = client.post(url, files=_cs_upload())
+    assert response.status_code == 502
+    assert response.json()["detail"] == "C# scanner returned HTTP 500"

@@ -6,6 +6,9 @@ Supported sources:
   ``Blueprint(url_prefix=...)``), parsed with the ``ast`` module.
 * JavaScript / TypeScript - Express-style ``router.get('/path', ...)`` calls, matched with
   a regex that skips common HTTP clients such as ``axios``.
+* C# - ASP.NET Core controllers and minimal APIs. These are analysed with Roslyn by the
+  separate .NET scanner service (``scanner-dotnet/``); this module only routes ``.cs``
+  files to it via :func:`csharp_files` and turns its output back into :class:`Route` objects.
 
 Routes and spec operations are matched on their *shape*: ``/books/{book_id}`` in code and
 ``/books/{bookId}`` in the spec are the same endpoint.
@@ -23,7 +26,9 @@ from app.core.parser import ParsedSpec
 METHODS = {"get", "post", "put", "delete", "patch", "head", "options"}
 PYTHON_SUFFIXES = {".py"}
 JS_SUFFIXES = {".js", ".ts", ".mjs", ".cjs"}
-SUPPORTED_SUFFIXES = PYTHON_SUFFIXES | JS_SUFFIXES
+CSHARP_SUFFIXES = {".cs"}
+SUPPORTED_SUFFIXES = PYTHON_SUFFIXES | JS_SUFFIXES | CSHARP_SUFFIXES
+SKIP_DIRS_CSHARP = {"bin", "obj"}
 SKIP_DIRS = {"node_modules", ".git", "__pycache__", "venv", ".venv", "dist", "build"}
 HTTP_CLIENTS = {"axios", "http", "https", "fetch", "request", "client", "api", "supertest"}
 
@@ -43,6 +48,12 @@ class Route:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self) | {"key": self.key}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Route":
+        return cls(method=str(data["method"]).lower(), path=normalize_path(str(data["path"])),
+                   file=str(data.get("file", "")), line=int(data.get("line", 0)),
+                   handler=str(data.get("handler", "")), doc=str(data.get("doc", "")))
 
 
 def normalize_path(path: str) -> str:
@@ -137,16 +148,23 @@ def scan_js(source: str, filename: str) -> list[Route]:
 
 def is_scannable(filename: str) -> bool:
     p = PurePosixPath(filename.replace("\\", "/"))
-    return p.suffix in SUPPORTED_SUFFIXES and not SKIP_DIRS.intersection(p.parts)
+    skip = SKIP_DIRS | SKIP_DIRS_CSHARP if p.suffix in CSHARP_SUFFIXES else SKIP_DIRS
+    return p.suffix in SUPPORTED_SUFFIXES and not skip.intersection(p.parts)
+
+
+def csharp_files(files: dict[str, str]) -> dict[str, str]:
+    """The ``.cs`` files that should be sent to the .NET scanner."""
+    return {name: text for name, text in files.items()
+            if PurePosixPath(name).suffix in CSHARP_SUFFIXES and is_scannable(name)}
 
 
 def scan_sources(files: dict[str, str]) -> list[Route]:
-    """Scan ``{filename: source}`` and return every route found."""
+    """Scan Python and JS/TS files in ``{filename: source}``; C# files are skipped here."""
     routes: list[Route] = []
     for filename in sorted(files):
-        if not is_scannable(filename):
-            continue
         suffix = PurePosixPath(filename).suffix
+        if not is_scannable(filename) or suffix in CSHARP_SUFFIXES:
+            continue
         scanner = scan_python if suffix in PYTHON_SUFFIXES else scan_js
         routes += scanner(files[filename], filename)
     return routes

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.codescan import Route, compare_with_spec, is_scannable, scan_sources
+from app.core.codescan import Route, compare_with_spec, csharp_files, is_scannable, scan_sources
 from app.core.lint import lint
 from app.core.parser import SpecError, parse_spec
 from app.core.rag import BM25Index, LLMConfig, answer, chunks_from_routes, chunks_from_spec
@@ -16,6 +16,7 @@ from app.database import get_db
 from app.models import CodeScan, SpecVersion
 from app.routers.versions import _parsed, _version_or_404
 from app.schemas import AskOut, AskRequest, LintRequest, ScanOut
+from app.services.csharp_scanner import CSharpScannerError, scan_csharp
 
 router = APIRouter(tags=["insights"])
 
@@ -97,6 +98,26 @@ async def _read_sources(uploads: list[UploadFile]) -> dict[str, str]:
     return files
 
 
+def _scan_all(sources: dict[str, str]) -> tuple[list[Route], list[str]]:
+    """Scan Python/JS locally and C# via the .NET scanner; C# problems become warnings."""
+    routes = scan_sources(sources)
+    cs = csharp_files(sources)
+    if not cs:
+        return routes, []
+    if len(cs) == len(sources) and not settings.csharp_scanner_url:
+        raise HTTPException(503, "Only C# files were uploaded, but no C# scanner is configured "
+                                 "(set SPECGUARD_CSHARP_SCANNER_URL)")
+    if not settings.csharp_scanner_url:
+        return routes, [f"Skipped {len(cs)} C# file(s): no C# scanner is configured (SPECGUARD_CSHARP_SCANNER_URL)"]
+    try:
+        routes += scan_csharp(cs, settings.csharp_scanner_url, timeout=settings.csharp_scanner_timeout_seconds)
+    except CSharpScannerError as exc:
+        if len(cs) == len(sources):
+            raise HTTPException(502, str(exc))
+        return routes, [f"Skipped {len(cs)} C# file(s): {exc}"]
+    return routes, []
+
+
 @router.post("/versions/{version_id}/scans", response_model=ScanOut, status_code=status.HTTP_201_CREATED)
 async def create_scan(version_id: int, files: list[UploadFile] = File(..., description="Source files or a .zip"),
                       db: Session = Depends(get_db)) -> CodeScan:
@@ -104,9 +125,11 @@ async def create_scan(version_id: int, files: list[UploadFile] = File(..., descr
     version = _version_or_404(db, version_id)
     sources = await _read_sources(files)
     if not sources:
-        raise HTTPException(422, "No supported source files found (.py, .js, .ts, .mjs, .cjs or a .zip of them)")
-    routes = scan_sources(sources)
+        raise HTTPException(422, "No supported source files found (.py, .js, .ts, .mjs, .cjs, .cs or a .zip of them)")
+
+    routes, warnings = _scan_all(sources)
     report = compare_with_spec(routes, _parsed(version))
+    report["warnings"] = warnings
     scan = CodeScan(spec_version_id=version.id, files_scanned=len(sources), in_sync=report["in_sync"],
                     routes=[r.to_dict() for r in routes], report=report)
     db.add(scan)
