@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SpecGuard.Scanner.Api/SpecGuard.Scanner.Api.csproj" />
+    <Project Path="src/SpecGuard.Scanner/SpecGuard.Scanner.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SpecGuard.Scanner.Tests/SpecGuard.Scanner.Tests.csproj" />
+  </Folder>
+</Solution>

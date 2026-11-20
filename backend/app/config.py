@@ -17,5 +17,9 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_timeout_seconds: float = 30.0
 
+    # Optional .NET Roslyn scanner (scanner-dotnet/) used for .cs files in drift scans.
+    csharp_scanner_url: str = ""
+    csharp_scanner_timeout_seconds: float = 30.0
+
 
 settings = Settings()

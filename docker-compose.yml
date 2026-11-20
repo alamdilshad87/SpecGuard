@@ -21,11 +21,20 @@ services:
       SPECGUARD_LLM_BASE_URL: ${SPECGUARD_LLM_BASE_URL:-}
       SPECGUARD_LLM_API_KEY: ${SPECGUARD_LLM_API_KEY:-}
       SPECGUARD_LLM_MODEL: ${SPECGUARD_LLM_MODEL:-}
+      # .NET Roslyn scanner used for C# files in drift scans
+      SPECGUARD_CSHARP_SCANNER_URL: http://scanner:8080
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+      scanner:
+        condition: service_started
+
+  scanner:
+    build: ./scanner-dotnet
+    expose:
+      - "8080"
 
   ui:
     build:

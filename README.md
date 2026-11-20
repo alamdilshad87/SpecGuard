@@ -26,15 +26,17 @@ When an API changes, the question is always the same: *will this break my client
 | Test generation | Valid requests, missing required params/fields, wrong types, enum violations, min/max and length boundaries |
 | Runner | Executes cases over HTTP with timeouts, stores every run in PostgreSQL with status, timing and response excerpt |
 | Lint | Undeclared or unused path params, path params not marked required, duplicate `operationId`s, missing or non-2xx-only responses, unresolvable `$ref`s, bodies on `GET`/`DELETE` |
-| Drift detection | Scans uploaded source (files or a `.zip`) for FastAPI/Flask routes via Python's `ast` and Express-style JS/TS routes via regex, then matches them to spec operations by path shape (`/books/{book_id}` = `/books/{bookId}`) |
+| Drift detection | Scans uploaded source (files or a `.zip`) for FastAPI/Flask routes via Python's `ast`, Express-style JS/TS routes via regex, and ASP.NET Core controllers and minimal APIs via Roslyn, then matches them to spec operations by path shape (`/books/{book_id}` = `/books/{bookId}`) |
+| C# scanner (.NET) | Separate .NET 10 service using Roslyn syntax trees: `[Route]`/`[Http*]`/`[AcceptVerbs]` attributes, `[controller]`/`[action]` tokens, `~/` overrides, route constraints, `MapGroup` prefixes, XML doc summaries |
 | Q&A (RAG) | Operations and route docstrings are chunked and ranked with BM25; answers come from any OpenAI-compatible LLM with cited chunk ids, or an extractive answer when no LLM is configured |
 | CI-friendly | `POST /analyze/diff` and `POST /analyze/lint` take raw specs, so they can gate a pipeline |
 
 ## Architecture
 
 ```
-frontend/  React + TypeScript (Vite)          ──HTTP──▶  backend/  FastAPI
-                                                                │
+frontend/  React + TypeScript (Vite)          ──HTTP──▶  backend/  FastAPI  ──HTTP──▶  scanner-dotnet/  .NET 10
+                                                                │                        Roslyn route scanner
+                                                                │                        (.cs files from drift scans)
                                                      app/core/  parser → schema → docs
                                                                         ├─▶ lint
                                                                         ├─▶ diff
@@ -45,6 +47,10 @@ frontend/  React + TypeScript (Vite)          ──HTTP──▶  backend/  Fas
                                                         PostgreSQL (SQLAlchemy 2.0)
                                         projects · spec_versions · test_runs · code_scans
 ```
+
+C# analysis lives in its own .NET service because Roslyn, the C# compiler platform, is the
+right tool for reading C# code: it parses real syntax trees rather than guessing with regexes.
+The Python backend sends it `.cs` files over HTTP and merges the routes it returns.
 
 Everything downstream works on one normalized model (`app/core/parser.py`), so `$ref` handling and parameter merging live in a single place. The core modules have no web or database dependencies and are unit-tested on their own.
 
@@ -85,7 +91,7 @@ Create a project, upload `examples/bookstore-v1.yaml` and `bookstore-v2.yaml`, t
 - **Docs**: generated reference for the selected version
 - **Breaking changes**: v1 → v2 reports 9 breaking changes (removed `DELETE`, new required `storeId`, `limit` max lowered, `bookId` type change, …)
 - **Tests**: run the 25 generated cases for v1 against `http://localhost:9000`
-- **Drift**: scan `examples/mock_bookstore.py` against v2: `DELETE /books/{book_id}` is undocumented and `GET /authors` is not implemented
+- **Drift**: scan `examples/mock_bookstore.py` (FastAPI) or `examples/BookstoreApi/BooksController.cs` (ASP.NET Core) against v2: the `DELETE` book route is undocumented and `GET /authors` is not implemented
 
 ![Test run](docs/screenshots/tests.png)
 
@@ -106,7 +112,7 @@ Create a project, upload `examples/bookstore-v1.yaml` and `bookstore-v2.yaml`, t
 | `POST` | `/analyze/diff` | Stateless diff of two raw specs |
 | `GET` | `/versions/{id}/lint` | Lint report for a stored version |
 | `POST` | `/analyze/lint` | Stateless lint of a raw spec (JSON: `content`) |
-| `POST` | `/versions/{id}/scans` | Scan source code for drift (multipart `files`: source files or a `.zip`) |
+| `POST` | `/versions/{id}/scans` | Scan source code for drift (multipart `files`: `.py`/`.js`/`.ts`/`.cs` files or a `.zip`) |
 | `GET` | `/versions/{id}/scans` | Past scans |
 | `POST` | `/versions/{id}/ask` | Ask a question (JSON: `question`, `k`, `use_llm`) |
 
@@ -126,10 +132,25 @@ If the call fails, the endpoint falls back to the extractive answer; `mode` in t
 ## Tests
 
 ```bash
-cd backend && pytest
+cd backend && pytest                 # Python backend
+cd scanner-dotnet && dotnet test     # .NET scanner (unit + WebApplicationFactory API tests)
 ```
 
-The runner tests use an `httpx.MockTransport` implementation of the bookstore API, so the generated expectations are checked against a server that actually follows the spec. CI runs the backend tests and the frontend build on every push.
+The runner tests use an `httpx.MockTransport` implementation of the bookstore API, so the generated expectations are checked against a server that actually follows the spec. CI runs the backend tests, the .NET scanner tests and the frontend build on every push.
+
+### C# scanner service
+
+The scanner runs automatically with `docker compose up`. To run it on its own:
+
+```bash
+cd scanner-dotnet
+dotnet run --project src/SpecGuard.Scanner.Api --urls http://localhost:8080
+export SPECGUARD_CSHARP_SCANNER_URL=http://localhost:8080   # for a locally run backend
+```
+
+`POST /scan` takes `{"files": {"path/File.cs": "source"}}` and returns the routes it found; the
+OpenAPI document is at `/openapi/v1.json`. If the backend has no scanner configured, `.cs` files in
+a mixed upload are skipped with a warning in `report.warnings`.
 
 ## Known limitations
 
@@ -138,17 +159,18 @@ The runner tests use an `httpx.MockTransport` implementation of the bookstore AP
 - Response bodies are not yet validated against the response schema; tests check status codes.
 - No authentication support in the runner yet (no auth headers or tokens).
 - Drift detection matches routes, not request/response schemas, and only for the frameworks listed above.
+- The C# scanner reads syntax only, so routes built from constants or at runtime aren't resolved; only string literals are.
 - Retrieval is keyword-based (BM25), so heavily paraphrased questions can miss.
 
 ## Roadmap
 
 - [ ] Response schema validation in the runner
 - [ ] Auth configuration for test runs (API key, bearer token)
-- [ ] .NET Core service for C# source analysis (map controllers to spec operations)
+- [x] .NET service for C# source analysis (map controllers and minimal APIs to spec operations)
 - [x] Q&A grounded in specs and source code (BM25 retrieval, optional LLM)
 - [ ] Hybrid retrieval with pgvector embeddings, plus a retrieval evaluation set
 - [ ] GitHub Action that comments the breaking-change report on pull requests
 
 ## Tech stack
 
-FastAPI · SQLAlchemy 2.0 · PostgreSQL · BM25 retrieval · OpenAI-compatible LLM API · httpx · Pydantic · pytest · React 18 · TypeScript · Vite · Docker · GitHub Actions
+FastAPI · .NET 10 · Roslyn · SQLAlchemy 2.0 · PostgreSQL · BM25 retrieval · OpenAI-compatible LLM API · httpx · Pydantic · pytest · React 18 · TypeScript · Vite · Docker · GitHub Actions
