@@ -71,6 +71,7 @@ UI at http://localhost:5173, API docs (Swagger) at http://localhost:8000/docs.
 cd backend
 pip install -r requirements.txt
 export SPECGUARD_DATABASE_URL=sqlite:///./specguard.db   # optional
+python -m app.migrate                                    # create / upgrade the schema
 uvicorn app.main:app --reload
 
 # Frontend
@@ -138,6 +139,21 @@ cd scanner-dotnet && dotnet test     # .NET scanner (unit + WebApplicationFactor
 
 The runner tests use an `httpx.MockTransport` implementation of the bookstore API, so the generated expectations are checked against a server that actually follows the spec. CI runs the backend tests, the .NET scanner tests and the frontend build on every push.
 
+### Database migrations
+
+The schema is managed with Alembic (`backend/migrations/`). The Docker image runs
+`python -m app.migrate` on start-up; databases created before migrations existed are
+detected and stamped automatically. After changing a model:
+
+```bash
+cd backend
+alembic revision --autogenerate -m "describe the change"   # review the generated file
+python -m app.migrate
+```
+
+`tests/test_migrations.py` fails if the models and migrations drift apart. It runs on SQLite
+locally and also against PostgreSQL when `SPECGUARD_TEST_POSTGRES_URL` is set (CI does this).
+
 ### C# scanner service
 
 The scanner runs automatically with `docker compose up`. To run it on its own:
@@ -173,4 +189,4 @@ a mixed upload are skipped with a warning in `report.warnings`.
 
 ## Tech stack
 
-FastAPI · .NET 10 · Roslyn · SQLAlchemy 2.0 · PostgreSQL · BM25 retrieval · OpenAI-compatible LLM API · httpx · Pydantic · pytest · React 18 · TypeScript · Vite · Docker · GitHub Actions
+FastAPI · .NET 10 · Roslyn · SQLAlchemy 2.0 · Alembic · PostgreSQL · BM25 retrieval · OpenAI-compatible LLM API · httpx · Pydantic · pytest · React 18 · TypeScript · Vite · Docker · GitHub Actions

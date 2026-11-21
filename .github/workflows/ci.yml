@@ -11,6 +11,22 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: specguard
+          POSTGRES_PASSWORD: specguard
+          POSTGRES_DB: specguard_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U specguard"
+          --health-interval 5s
+          --health-retries 10
+    env:
+      # Also run the migration tests against real PostgreSQL
+      SPECGUARD_TEST_POSTGRES_URL: postgresql+psycopg2://specguard:specguard@localhost:5432/specguard_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
