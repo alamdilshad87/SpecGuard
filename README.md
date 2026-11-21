@@ -122,15 +122,54 @@ Create a project, upload `examples/bookstore-v1.yaml` and `bookstore-v2.yaml`, t
 `/ask` supports three retrieval modes via the `retrieval` field:
 
 - `bm25`: keyword ranking; exact terms like `storeId` or `409` match well
-- `vector`: semantic search over embeddings stored in PostgreSQL with pgvector (cosine distance,
-  HNSW index); catches paraphrases such as "get rid of a title" → `DELETE /books/{bookId}`
-- `hybrid` (default): both lists fused with Reciprocal Rank Fusion
+- `vector` (default): semantic search over embeddings stored in PostgreSQL with pgvector (cosine
+  distance, HNSW index); catches paraphrases such as "get rid of a title" → `DELETE /books/{bookId}`
+- `hybrid`: both lists fused with Reciprocal Rank Fusion
+
+The default was chosen by the evaluation below.
 
 Embeddings come from `BAAI/bge-small-en-v1.5` (384 dims), run locally with fastembed/ONNX: no API
 keys, and nothing leaves the machine. The Docker image includes the model. A version is embedded
 on its first question and re-embedded only when its spec, latest code scan or the model changes.
 Set `SPECGUARD_EMBEDDING_PROVIDER=none` to disable vector search; requests then fall back to BM25
 and the response's `note` says so.
+
+### Retrieval evaluation
+
+`backend/evaluation/` holds 42 questions over a 34-operation e-commerce spec
+(`examples/shop-api.yaml`). Each question names the operation that answers it; 14 use the spec's
+own wording ("refund a payment") and 28 are paraphrases ("give the customer their money back").
+The questions were written before any retrieval run.
+
+```bash
+cd backend && python -m evaluation.run --misses hybrid
+```
+
+Corpus: 34 operations · 42 questions · embedder `BAAI/bge-small-en-v1.5`
+
+| Questions | Mode | Recall@1 | Recall@3 | Recall@5 | MRR |
+|---|---|---|---|---|---|
+| All (42) | bm25 | 52% | 62% | 62% | 0.58 |
+| All (42) | vector | 74% | 90% | 90% | 0.81 |
+| All (42) | hybrid | 62% | 83% | 88% | 0.73 |
+| Keyword (14) | bm25 | 100% | 100% | 100% | 1.00 |
+| Keyword (14) | vector | 93% | 100% | 100% | 0.96 |
+| Keyword (14) | hybrid | 100% | 100% | 100% | 1.00 |
+| Paraphrase (28) | bm25 | 29% | 43% | 43% | 0.36 |
+| Paraphrase (28) | vector | 64% | 86% | 86% | 0.74 |
+| Paraphrase (28) | hybrid | 43% | 75% | 82% | 0.60 |
+
+What it shows:
+
+- **Semantic search is what makes paraphrased questions work**: recall@5 goes from 43% (BM25) to
+  86% (vector), and overall MRR from 0.58 to 0.81.
+- **Plain RRF hybrid did not beat vector-only** (MRR 0.73). When BM25 is confidently wrong on a
+  paraphrase, fusing by rank lets it push the right answer down. Hybrid only edges ahead on
+  exact-wording questions (100% vs 93% recall@1), so `vector` is the default and `hybrid` stays
+  available.
+- 42 questions is a small set: differences of a question or two are noise. Weighting the fusion
+  could help, but tuning weights on these same questions would overfit them; that needs a
+  separate held-out set.
 
 ### Optional: LLM answers
 
@@ -191,7 +230,7 @@ a mixed upload are skipped with a warning in `report.warnings`.
 - No authentication support in the runner yet (no auth headers or tokens).
 - Drift detection matches routes, not request/response schemas, and only for the frameworks listed above.
 - The C# scanner reads syntax only, so routes built from constants or at runtime aren't resolved; only string literals are.
-- Plain RRF can let a confidently wrong keyword ranking outvote a correct semantic match; the evaluation set (next) measures each mode.
+- The retrieval evaluation is small (42 questions, one spec) and written by the project author; treat its numbers as indicative.
 
 ## Roadmap
 
@@ -200,7 +239,8 @@ a mixed upload are skipped with a warning in `report.warnings`.
 - [x] .NET service for C# source analysis (map controllers and minimal APIs to spec operations)
 - [x] Q&A grounded in specs and source code (BM25 retrieval, optional LLM)
 - [x] Hybrid retrieval with pgvector embeddings
-- [ ] Retrieval evaluation set (recall@k, MRR per mode)
+- [x] Retrieval evaluation set (recall@k, MRR per mode)
+- [ ] Weighted fusion tuned on a held-out question set
 - [ ] GitHub Action that comments the breaking-change report on pull requests
 
 ## Tech stack

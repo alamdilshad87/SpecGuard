@@ -1,0 +1,56 @@
+# Retrieval evaluation set for examples/shop-api.yaml.
+#
+# Each question names the operation that answers it. Questions were written before any
+# retrieval run and are not tuned to the results.
+#
+#   keyword    - uses the spec's own vocabulary ("refund a payment")
+#   paraphrase - asks the way a user would, mostly without the spec's words
+#                ("give the customer their money back")
+spec: ../../examples/shop-api.yaml
+
+questions:
+  # ------------------------------------------------------------------ keyword
+  - {type: keyword, q: "How do I refresh an access token?", expected: "POST /auth/token/refresh"}
+  - {type: keyword, q: "Apply a coupon code to a cart", expected: "POST /carts/{cartId}/coupons"}
+  - {type: keyword, q: "List reviews for a product", expected: "GET /products/{productId}/reviews"}
+  - {type: keyword, q: "Which endpoint returns tracking numbers for shipments?", expected: "GET /orders/{orderId}/shipments"}
+  - {type: keyword, q: "How do I register a webhook?", expected: "POST /webhooks"}
+  - {type: keyword, q: "Get the sales report grouped by month", expected: "GET /reports/sales"}
+  - {type: keyword, q: "Cancel an order", expected: "POST /orders/{orderId}/cancel"}
+  - {type: keyword, q: "Refund a payment", expected: "POST /payments/{paymentId}/refunds"}
+  - {type: keyword, q: "Adjust stock for a product in a warehouse", expected: "PATCH /products/{productId}/inventory"}
+  - {type: keyword, q: "List product categories", expected: "GET /categories"}
+  - {type: keyword, q: "Remove an item from the cart", expected: "DELETE /carts/{cartId}/items/{itemId}"}
+  - {type: keyword, q: "Which request needs the Idempotency-Key header?", expected: "POST /orders"}
+  - {type: keyword, q: "Add an address for a customer", expected: "POST /customers/{customerId}/addresses"}
+  - {type: keyword, q: "Quote shipping rates by postal code", expected: "GET /shipping/rates"}
+
+  # ------------------------------------------------------------------ paraphrase
+  - {type: paraphrase, q: "My integration needs credentials before it can call anything", expected: "POST /auth/token"}
+  - {type: paraphrase, q: "Keep my app signed in after the session runs out", expected: "POST /auth/token/refresh"}
+  - {type: paraphrase, q: "Sign up a new shopper", expected: "POST /customers"}
+  - {type: paraphrase, q: "A user wants all their personal data erased", expected: "DELETE /customers/{customerId}"}
+  - {type: paraphrase, q: "Change someone's email or phone number", expected: "PATCH /customers/{customerId}"}
+  - {type: paraphrase, q: "Where are a buyer's saved delivery locations?", expected: "GET /customers/{customerId}/addresses"}
+  - {type: paraphrase, q: "Search the catalogue for cheap running shoes", expected: "GET /products"}
+  - {type: paraphrase, q: "Put a new item up for sale", expected: "POST /products"}
+  - {type: paraphrase, q: "Stop selling something but keep its history", expected: "DELETE /products/{productId}"}
+  - {type: paraphrase, q: "How many units are left in each warehouse?", expected: "GET /products/{productId}/inventory"}
+  - {type: paraphrase, q: "We received 50 more units from the supplier, record that", expected: "PATCH /products/{productId}/inventory"}
+  - {type: paraphrase, q: "Let a customer rate something they bought", expected: "POST /products/{productId}/reviews"}
+  - {type: paraphrase, q: "What are people saying about this item?", expected: "GET /products/{productId}/reviews"}
+  - {type: paraphrase, q: "Start a new shopping basket", expected: "POST /carts"}
+  - {type: paraphrase, q: "Put two of these in my basket", expected: "POST /carts/{cartId}/items"}
+  - {type: paraphrase, q: "Use a discount voucher", expected: "POST /carts/{cartId}/coupons"}
+  - {type: paraphrase, q: "What's the total in my basket including tax?", expected: "GET /carts/{cartId}"}
+  - {type: paraphrase, q: "Turn my basket into a purchase", expected: "POST /orders"}
+  - {type: paraphrase, q: "Show all purchases still waiting to be dispatched", expected: "GET /orders"}
+  - {type: paraphrase, q: "The buyer changed their mind before it was sent out", expected: "POST /orders/{orderId}/cancel"}
+  - {type: paraphrase, q: "Charge the customer's card", expected: "POST /orders/{orderId}/payments"}
+  - {type: paraphrase, q: "Give the customer their money back for a broken item", expected: "POST /payments/{paymentId}/refunds"}
+  - {type: paraphrase, q: "Where is my parcel?", expected: "GET /orders/{orderId}/shipments"}
+  - {type: paraphrase, q: "How much does delivery cost to Germany?", expected: "GET /shipping/rates"}
+  - {type: paraphrase, q: "Notify my server whenever someone buys something", expected: "POST /webhooks"}
+  - {type: paraphrase, q: "Stop sending event callbacks to an old URL", expected: "DELETE /webhooks/{webhookId}"}
+  - {type: paraphrase, q: "How much revenue did we make last quarter?", expected: "GET /reports/sales"}
+  - {type: paraphrase, q: "Look up the details of one purchase", expected: "GET /orders/{orderId}"}
