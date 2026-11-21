@@ -174,9 +174,31 @@ def llm_complete(messages: list[dict[str, str]], config: LLMConfig,
         return resp.json()["choices"][0]["message"]["content"]
 
 
+def reciprocal_rank_fusion(rankings: list[list[Hit]], k: int = 60, limit: int = 4) -> list[Hit]:
+    """Merge ranked lists by rank, not score: each list adds ``1 / (k + rank)`` per chunk.
+
+    BM25 scores and cosine similarities live on different scales, so adding them directly
+    lets one retriever dominate. RRF only uses positions, which makes it robust and
+    parameter-light (k=60 is the value from the original paper).
+    """
+    scores: dict[str, float] = {}
+    chunks: dict[str, Chunk] = {}
+    for ranking in rankings:
+        for rank, hit in enumerate(ranking, start=1):
+            scores[hit.chunk.id] = scores.get(hit.chunk.id, 0.0) + 1.0 / (k + rank)
+            chunks[hit.chunk.id] = hit.chunk
+    best = sorted(scores, key=lambda cid: scores[cid], reverse=True)[:limit]
+    return [Hit(chunks[cid], scores[cid]) for cid in best]
+
+
 def answer(index: BM25Index, question: str, k: int = 4, llm: LLMConfig | None = None,
            transport: httpx.BaseTransport | None = None) -> dict[str, Any]:
-    hits = index.search(question, k)
+    """BM25-only convenience wrapper around :func:`answer_from_hits`."""
+    return answer_from_hits(question, index.search(question, k), llm, transport)
+
+
+def answer_from_hits(question: str, hits: list[Hit], llm: LLMConfig | None = None,
+                     transport: httpx.BaseTransport | None = None) -> dict[str, Any]:
     sources = [{"id": h.chunk.id, "title": h.chunk.title, "source": h.chunk.source,
                 "score": round(h.score, 3)} for h in hits]
     if not hits:
