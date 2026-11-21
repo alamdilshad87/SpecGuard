@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +22,12 @@ class Settings(BaseSettings):
     # Optional .NET Roslyn scanner (scanner-dotnet/) used for .cs files in drift scans.
     csharp_scanner_url: str = ""
     csharp_scanner_timeout_seconds: float = 30.0
+
+    # Embeddings for semantic retrieval in /ask. "fastembed" runs a local ONNX model;
+    # "none" disables vector search (keyword-only BM25).
+    embedding_provider: Literal["fastembed", "none"] = "fastembed"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_cache_dir: str = ""  # default: fastembed's own cache location
 
 
 settings = Settings()

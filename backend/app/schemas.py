@@ -93,6 +93,8 @@ class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
     k: int = Field(default=4, ge=1, le=20, description="How many chunks to retrieve")
     use_llm: bool = True
+    retrieval: Literal["bm25", "vector", "hybrid"] = Field(
+        default="hybrid", description="Keyword (BM25), semantic (embeddings) or both fused with RRF")
 
 
 class AskSource(BaseModel):
@@ -105,4 +107,6 @@ class AskSource(BaseModel):
 class AskOut(BaseModel):
     answer: str
     mode: Literal["llm", "extractive", "none"]
+    retrieval: Literal["bm25", "vector", "hybrid"] = Field(description="Retrieval mode actually used")
+    note: str | None = Field(default=None, description="Why the requested mode was not used, if it wasn't")
     sources: list[AskSource]

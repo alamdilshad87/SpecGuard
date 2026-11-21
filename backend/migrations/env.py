@@ -7,6 +7,7 @@ from sqlalchemy import engine_from_config, pool
 from app import models  # noqa: F401  (registers tables on Base.metadata)
 from app.config import settings
 from app.database import Base
+from app.migrate import compare_type, register_vector_type
 
 config = context.config
 if config.config_file_name is not None and config.attributes.get("configure_logging", True):
@@ -48,11 +49,12 @@ def run_migrations_online() -> None:
 
 
 def _run(connection) -> None:
+    register_vector_type(connection)
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
         render_as_batch=connection.dialect.name == "sqlite",  # SQLite needs batch mode for ALTER TABLE
-        compare_type=True,
+        compare_type=compare_type,
     )
     with context.begin_transaction():
         context.run_migrations()

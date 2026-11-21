@@ -13,9 +13,10 @@ from sqlalchemy import create_engine, inspect, text
 
 from app import models  # noqa: F401
 from app.database import Base
-from app.migrate import alembic_config, upgrade
+from app.migrate import alembic_config, compare_type, register_vector_type, upgrade
 
-TABLES = {"projects", "spec_versions", "test_runs", "code_scans"}
+LEGACY_TABLES = ("projects", "spec_versions", "test_runs", "code_scans")  # schema before migrations
+TABLES = {*LEGACY_TABLES, "retrieval_chunks"}
 POSTGRES_URL = os.environ.get("SPECGUARD_TEST_POSTGRES_URL")
 
 
@@ -37,7 +38,8 @@ def _schema_diff(url: str) -> list:
     engine = create_engine(url)
     try:
         with engine.connect() as conn:
-            ctx = MigrationContext.configure(conn, opts={"compare_type": True})
+            register_vector_type(conn)
+            ctx = MigrationContext.configure(conn, opts={"compare_type": compare_type})
             return compare_metadata(ctx, Base.metadata)
     finally:
         engine.dispose()
@@ -63,7 +65,8 @@ def test_upgrade_matches_models_and_downgrade_removes_everything(db_url):
 def test_legacy_database_is_stamped_and_keeps_data(tmp_path):
     url = f"sqlite:///{tmp_path / 'legacy.db'}"
     engine = create_engine(url)
-    Base.metadata.create_all(engine)  # how the schema was created before migrations
+    # How the schema was created before migrations existed (only the original tables)
+    Base.metadata.create_all(engine, tables=[Base.metadata.tables[t] for t in LEGACY_TABLES])
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO projects (name, created_at) VALUES ('Kept', CURRENT_TIMESTAMP)"))
 

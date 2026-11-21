@@ -1,6 +1,7 @@
 import json
 
 import httpx
+import pytest
 
 from app.core.codescan import scan_sources
 from app.core.parser import parse_spec
@@ -60,3 +61,17 @@ def test_llm_failure_falls_back_to_extractive(spec_v1):
     llm = LLMConfig(base_url="http://llm.test/v1", model="m")
     transport = httpx.MockTransport(lambda _: httpx.Response(500))
     assert answer(_index(spec_v1), "delete a book", llm=llm, transport=transport)["mode"] == "extractive"
+
+
+def test_reciprocal_rank_fusion_rewards_agreement():
+    from app.core.rag import Chunk, Hit, reciprocal_rank_fusion
+
+    a, b, c = (Chunk(x, "operation", x, x) for x in "abc")
+    keyword = [Hit(a, 9.0), Hit(b, 5.0)]
+    semantic = [Hit(b, 0.9), Hit(c, 0.8)]
+
+    fused = reciprocal_rank_fusion([keyword, semantic], k=60, limit=3)
+
+    assert [h.chunk.id for h in fused] == ["b", "a", "c"]  # b appears in both lists
+    assert fused[0].score == pytest.approx(1 / 62 + 1 / 61)
+    assert reciprocal_rank_fusion([[], []]) == []
