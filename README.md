@@ -28,7 +28,7 @@ When an API changes, the question is always the same: *will this break my client
 | Lint | Undeclared or unused path params, path params not marked required, duplicate `operationId`s, missing or non-2xx-only responses, unresolvable `$ref`s, bodies on `GET`/`DELETE` |
 | Drift detection | Scans uploaded source (files or a `.zip`) for FastAPI/Flask routes via Python's `ast`, Express-style JS/TS routes via regex, and ASP.NET Core controllers and minimal APIs via Roslyn, then matches them to spec operations by path shape (`/books/{book_id}` = `/books/{bookId}`) |
 | C# scanner (.NET) | Separate .NET 10 service using Roslyn syntax trees: `[Route]`/`[Http*]`/`[AcceptVerbs]` attributes, `[controller]`/`[action]` tokens, `~/` overrides, route constraints, `MapGroup` prefixes, XML doc summaries |
-| Q&A (RAG) | Operations and route docstrings are chunked and ranked with BM25; answers come from any OpenAI-compatible LLM with cited chunk ids, or an extractive answer when no LLM is configured |
+| Q&A (RAG) | Operations and route docstrings are chunked and retrieved with BM25 keyword search, pgvector semantic search (local `bge-small` embeddings, HNSW index), or both fused with Reciprocal Rank Fusion; answers come from any OpenAI-compatible LLM with cited chunk ids, or an extractive answer when no LLM is configured |
 | CI-friendly | `POST /analyze/diff` and `POST /analyze/lint` take raw specs, so they can gate a pipeline |
 
 ## Architecture
@@ -115,7 +115,22 @@ Create a project, upload `examples/bookstore-v1.yaml` and `bookstore-v2.yaml`, t
 | `POST` | `/analyze/lint` | Stateless lint of a raw spec (JSON: `content`) |
 | `POST` | `/versions/{id}/scans` | Scan source code for drift (multipart `files`: `.py`/`.js`/`.ts`/`.cs` files or a `.zip`) |
 | `GET` | `/versions/{id}/scans` | Past scans |
-| `POST` | `/versions/{id}/ask` | Ask a question (JSON: `question`, `k`, `use_llm`) |
+| `POST` | `/versions/{id}/ask` | Ask a question (JSON: `question`, `k`, `use_llm`, `retrieval`: `bm25` / `vector` / `hybrid`) |
+
+### Retrieval
+
+`/ask` supports three retrieval modes via the `retrieval` field:
+
+- `bm25`: keyword ranking; exact terms like `storeId` or `409` match well
+- `vector`: semantic search over embeddings stored in PostgreSQL with pgvector (cosine distance,
+  HNSW index); catches paraphrases such as "get rid of a title" → `DELETE /books/{bookId}`
+- `hybrid` (default): both lists fused with Reciprocal Rank Fusion
+
+Embeddings come from `BAAI/bge-small-en-v1.5` (384 dims), run locally with fastembed/ONNX: no API
+keys, and nothing leaves the machine. The Docker image includes the model. A version is embedded
+on its first question and re-embedded only when its spec, latest code scan or the model changes.
+Set `SPECGUARD_EMBEDDING_PROVIDER=none` to disable vector search; requests then fall back to BM25
+and the response's `note` says so.
 
 ### Optional: LLM answers
 
@@ -176,7 +191,7 @@ a mixed upload are skipped with a warning in `report.warnings`.
 - No authentication support in the runner yet (no auth headers or tokens).
 - Drift detection matches routes, not request/response schemas, and only for the frameworks listed above.
 - The C# scanner reads syntax only, so routes built from constants or at runtime aren't resolved; only string literals are.
-- Retrieval is keyword-based (BM25), so heavily paraphrased questions can miss.
+- Plain RRF can let a confidently wrong keyword ranking outvote a correct semantic match; the evaluation set (next) measures each mode.
 
 ## Roadmap
 
@@ -184,9 +199,10 @@ a mixed upload are skipped with a warning in `report.warnings`.
 - [ ] Auth configuration for test runs (API key, bearer token)
 - [x] .NET service for C# source analysis (map controllers and minimal APIs to spec operations)
 - [x] Q&A grounded in specs and source code (BM25 retrieval, optional LLM)
-- [ ] Hybrid retrieval with pgvector embeddings, plus a retrieval evaluation set
+- [x] Hybrid retrieval with pgvector embeddings
+- [ ] Retrieval evaluation set (recall@k, MRR per mode)
 - [ ] GitHub Action that comments the breaking-change report on pull requests
 
 ## Tech stack
 
-FastAPI · .NET 10 · Roslyn · SQLAlchemy 2.0 · Alembic · PostgreSQL · BM25 retrieval · OpenAI-compatible LLM API · httpx · Pydantic · pytest · React 18 · TypeScript · Vite · Docker · GitHub Actions
+FastAPI · .NET 10 · Roslyn · SQLAlchemy 2.0 · Alembic · PostgreSQL · pgvector · fastembed (bge-small) · BM25 + RRF hybrid retrieval · OpenAI-compatible LLM API · httpx · Pydantic · pytest · React 18 · TypeScript · Vite · Docker · GitHub Actions
