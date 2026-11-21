@@ -2,13 +2,15 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, TestCase, TestRun } from "../api";
 
 const CATEGORIES = ["positive", "negative", "edge"] as const;
+const POLL_MS = 1000;
+const isActive = (run?: TestRun) => run?.status === "queued" || run?.status === "running";
 
 export default function TestsView({ versionId }: { versionId: number }) {
   const [cases, setCases] = useState<TestCase[]>([]);
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [baseUrl, setBaseUrl] = useState("http://localhost:9000");
   const [selected, setSelected] = useState<string[]>([...CATEGORIES]);
-  const [running, setRunning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -17,6 +19,21 @@ export default function TestsView({ versionId }: { versionId: number }) {
     api.runs(versionId).then(setRuns).catch(() => setRuns([]));
   }, [versionId]);
 
+  // Runs execute in a background worker: poll the newest run until it finishes.
+  const latest = runs[0];
+  useEffect(() => {
+    if (!isActive(latest)) return;
+    const timer = setTimeout(async () => {
+      try {
+        const fresh = await api.run(latest.id);
+        setRuns((prev) => prev.map((r) => (r.id === fresh.id ? fresh : r)));
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    }, POLL_MS);
+    return () => clearTimeout(timer);
+  }, [latest]);
+
   const counts = useMemo(
     () => Object.fromEntries(CATEGORIES.map((c) => [c, cases.filter((t) => t.category === c).length])),
     [cases],
@@ -24,15 +41,15 @@ export default function TestsView({ versionId }: { versionId: number }) {
 
   async function run(e: FormEvent) {
     e.preventDefault();
-    setRunning(true);
+    setSubmitting(true);
     setError(null);
     try {
-      const result = await api.runTests(versionId, baseUrl, selected);
-      setRuns((prev) => [result, ...prev]);
+      const queued = await api.runTests(versionId, baseUrl, selected);
+      setRuns((prev) => [queued, ...prev]);
     } catch (err) {
       setError((err as Error).message);
     } finally {
-      setRunning(false);
+      setSubmitting(false);
     }
   }
 
@@ -40,7 +57,7 @@ export default function TestsView({ versionId }: { versionId: number }) {
     setSelected((prev) => (prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]));
   }
 
-  const latest = runs[0];
+  const busy = submitting || isActive(latest);
 
   return (
     <div>
@@ -51,11 +68,32 @@ export default function TestsView({ versionId }: { versionId: number }) {
             <input type="checkbox" checked={selected.includes(c)} onChange={() => toggle(c)} /> {c} ({counts[c] ?? 0})
           </label>
         ))}
-        <button disabled={running || selected.length === 0}>{running ? "Running…" : "Run tests"}</button>
+        <button disabled={busy || selected.length === 0}>
+          {latest?.status === "queued" ? "Queued…" : busy ? "Running…" : "Run tests"}
+        </button>
       </form>
       {error && <p className="error">{error}</p>}
 
-      {latest && (
+      {latest && isActive(latest) && (
+        <div className="panel inset">
+          <h3>
+            <span className="badge info">{latest.status}</span>{" "}
+            {latest.status === "queued"
+              ? "Waiting for a worker to pick up this run…"
+              : `Running against ${latest.base_url}${latest.attempts > 1 ? ` (attempt ${latest.attempts})` : ""}…`}
+          </h3>
+          <p className="muted small">Runs execute in the background; this updates automatically.</p>
+        </div>
+      )}
+
+      {latest?.status === "failed" && (
+        <div className="panel inset">
+          <h3><span className="badge fail">failed</span> Run #{latest.id} could not complete</h3>
+          <p className="error small">{latest.error}</p>
+        </div>
+      )}
+
+      {latest?.status === "succeeded" && (
         <div className="panel inset">
           <h3>
             Latest run: {latest.passed}/{latest.total} passed

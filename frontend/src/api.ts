@@ -58,12 +58,19 @@ export interface TestResult {
   duration_ms: number;
 }
 
+export type RunStatus = "queued" | "running" | "succeeded" | "failed";
+
 export interface TestRun {
   id: number;
   base_url: string;
+  status: RunStatus;
+  attempts: number;
+  error: string | null;
   total: number;
   passed: number;
   created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
   results: TestResult[];
 }
 
@@ -158,6 +165,7 @@ export const api = {
   runTests: (versionId: number, baseUrl: string, categories?: string[]) =>
     request<TestRun>(`/versions/${versionId}/runs`, json({ base_url: baseUrl, categories })),
   runs: (versionId: number) => request<TestRun[]>(`/versions/${versionId}/runs`),
+  run: (runId: number) => request<TestRun>(`/runs/${runId}`),
   diff: (fromId: number, toId: number) => request<DiffResult>(`/diff?from=${fromId}&to=${toId}`),
   lint: (versionId: number) => request<LintReport>(`/versions/${versionId}/lint`),
   scans: (versionId: number) => request<CodeScan[]>(`/versions/${versionId}/scans`),
