@@ -93,8 +93,10 @@ class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
     k: int = Field(default=4, ge=1, le=20, description="How many chunks to retrieve")
     use_llm: bool = True
+    # Default chosen from the retrieval evaluation (backend/evaluation): vector search had the
+    # best recall and MRR overall, and plain RRF hybrid did not beat it.
     retrieval: Literal["bm25", "vector", "hybrid"] = Field(
-        default="hybrid", description="Keyword (BM25), semantic (embeddings) or both fused with RRF")
+        default="vector", description="Keyword (BM25), semantic (embeddings) or both fused with RRF")
 
 
 class AskSource(BaseModel):
