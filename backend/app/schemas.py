@@ -63,9 +63,15 @@ class RunOut(BaseModel):
     id: int
     spec_version_id: int
     base_url: str
+    categories: list[str] | None = None
+    status: Literal["queued", "running", "succeeded", "failed"]
+    attempts: int
+    error: str | None = None
     total: int
     passed: int
     created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     results: list[dict[str, Any]]
 
 
