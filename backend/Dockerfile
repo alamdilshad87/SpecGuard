@@ -6,6 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Bake the embedding model into the image so the API starts fast and works offline.
+ENV SPECGUARD_EMBEDDING_CACHE_DIR=/opt/models
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/opt/models')"
+
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY app ./app
