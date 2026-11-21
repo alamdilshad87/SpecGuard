@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     # Upper bound for requests the test runner sends to a target API
     runner_timeout_seconds: float = 10.0
 
+    # Background worker (python -m app.worker) that executes queued test runs
+    worker_poll_seconds: float = 1.0
+    worker_stale_after_seconds: float = 600.0  # a "running" job older than this is presumed orphaned
+    worker_max_attempts: int = 3
+
     # Optional LLM for the /ask endpoint: any OpenAI-compatible chat completions API.
     # Leave base URL or model empty to use extractive (offline) answers.
     llm_base_url: str = ""
