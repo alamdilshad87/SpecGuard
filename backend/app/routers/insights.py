@@ -11,12 +11,14 @@ from app.config import settings
 from app.core.codescan import Route, compare_with_spec, csharp_files, is_scannable, scan_sources
 from app.core.lint import lint
 from app.core.parser import SpecError, parse_spec
-from app.core.rag import BM25Index, LLMConfig, answer, chunks_from_routes, chunks_from_spec
+from app.core.embeddings import Embedder
+from app.core.rag import BM25Index, Chunk, LLMConfig, answer_from_hits, chunks_from_routes, chunks_from_spec
 from app.database import get_db
 from app.models import CodeScan, SpecVersion
 from app.routers.versions import _parsed, _version_or_404
 from app.schemas import AskOut, AskRequest, LintRequest, ScanOut
 from app.services.csharp_scanner import CSharpScannerError, scan_csharp
+from app.services.retrieval import get_embedder, retrieve
 
 router = APIRouter(tags=["insights"])
 
@@ -153,11 +155,10 @@ def _latest_scan(db: Session, version_id: int) -> CodeScan | None:
 
 
 @lru_cache(maxsize=64)
-def _index(raw: str, routes: tuple[tuple, ...]) -> BM25Index:
-    """Build (and cache) the retrieval index for a spec plus documented routes from its latest scan."""
-    chunks = chunks_from_spec(parse_spec(raw))
-    chunks += chunks_from_routes([Route(*r) for r in routes])
-    return BM25Index(chunks)
+def _corpus(raw: str, routes: tuple[tuple, ...]) -> tuple[tuple[Chunk, ...], BM25Index]:
+    """Chunks for a spec plus documented routes from its latest scan, and their (cached) BM25 index."""
+    chunks = chunks_from_spec(parse_spec(raw)) + chunks_from_routes([Route(*r) for r in routes])
+    return tuple(chunks), BM25Index(chunks)
 
 
 def _llm_config() -> LLMConfig:
@@ -166,7 +167,8 @@ def _llm_config() -> LLMConfig:
 
 
 @router.post("/versions/{version_id}/ask", response_model=AskOut)
-def ask(version_id: int, payload: AskRequest, db: Session = Depends(get_db)) -> dict:
+def ask(version_id: int, payload: AskRequest, db: Session = Depends(get_db),
+        embedder: Embedder | None = Depends(get_embedder)) -> dict:
     """Answer a question from this spec version and, if scanned, its source code docstrings."""
     version: SpecVersion = _version_or_404(db, version_id)
     scan = _latest_scan(db, version_id)
@@ -174,5 +176,7 @@ def ask(version_id: int, payload: AskRequest, db: Session = Depends(get_db)) -> 
         (r["method"], r["path"], r["file"], r["line"], r.get("handler", ""), r["doc"])
         for r in (scan.routes if scan else []) if r.get("doc")
     )
-    index = _index(version.raw, routes)
-    return answer(index, payload.question, k=payload.k, llm=_llm_config() if payload.use_llm else None)
+    chunks, bm25 = _corpus(version.raw, routes)
+    found = retrieve(db, version.id, list(chunks), bm25, payload.question, payload.k, payload.retrieval, embedder)
+    result = answer_from_hits(payload.question, found.hits, llm=_llm_config() if payload.use_llm else None)
+    return result | {"retrieval": found.mode, "note": found.note}

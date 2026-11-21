@@ -171,3 +171,24 @@ def test_csharp_only_upload_needs_a_working_scanner(client, spec_v1, monkeypatch
     response = client.post(url, files=_cs_upload())
     assert response.status_code == 502
     assert response.json()["detail"] == "C# scanner returned HTTP 500"
+
+
+# ---------------------------------------------------------------- retrieval modes
+
+def test_ask_reports_retrieval_mode_and_fallback(client, spec_v1):
+    from app.main import app
+    from app.services.retrieval import get_embedder
+
+    version = _version(client, spec_v1)
+    url = f"/versions/{version['id']}/ask"
+
+    for mode in ("bm25", "vector", "hybrid"):
+        body = client.post(url, json={"question": "delete a book", "retrieval": mode}).json()
+        assert (body["retrieval"], body["note"]) == (mode, None)
+        assert body["sources"][0]["id"] == "op:DELETE /books/{bookId}"
+
+    app.dependency_overrides[get_embedder] = lambda: None  # no embedding model configured
+    body = client.post(url, json={"question": "delete a book"}).json()
+    assert body["retrieval"] == "bm25" and "disabled" in body["note"]
+
+    assert client.post(url, json={"question": "x", "retrieval": "magic"}).status_code == 422
