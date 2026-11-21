@@ -21,6 +21,25 @@ INITIAL_REVISION = "0001"
 log = logging.getLogger("specguard.migrate")
 
 
+def register_vector_type(connection) -> None:
+    """Let PostgreSQL reflection recognise pgvector columns (for autogenerate/compare)."""
+    if connection.dialect.name == "postgresql":
+        from pgvector.sqlalchemy import Vector
+        connection.dialect.ischema_names["vector"] = Vector
+
+
+def compare_type(context, inspected_column, metadata_column, inspected_type, metadata_type):
+    """Alembic type-compare hook: SQLite has no vector type and reflects it as NUMERIC.
+
+    Returning False means "no difference"; None falls back to Alembic's default comparison.
+    """
+    from pgvector.sqlalchemy import Vector
+
+    if isinstance(metadata_type, Vector) and context.dialect.name == "sqlite":
+        return False
+    return None
+
+
 def alembic_config(url: str) -> Config:
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))

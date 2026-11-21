@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.embeddings import EMBEDDING_DIM
 from app.database import Base
 
 
@@ -68,3 +70,29 @@ class CodeScan(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     spec_version: Mapped[SpecVersion] = relationship(back_populates="scans")
+
+
+class RetrievalChunk(Base):
+    """A retrievable passage (spec operation or code docstring) and its embedding.
+
+    ``corpus_key`` identifies one indexed set of chunks for a version: a hash of the
+    embedding model plus every chunk's id and text. When the spec, its latest code scan or
+    the model changes, the key changes and the version is re-indexed.
+    """
+
+    __tablename__ = "retrieval_chunks"
+    __table_args__ = (
+        Index("ix_retrieval_chunks_version_corpus", "spec_version_id", "corpus_key"),
+        Index("ix_retrieval_chunks_embedding_hnsw", "embedding", postgresql_using="hnsw",
+              postgresql_with={"m": 16, "ef_construction": 64},
+              postgresql_ops={"embedding": "vector_cosine_ops"}),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    spec_version_id: Mapped[int] = mapped_column(ForeignKey("spec_versions.id", ondelete="CASCADE"))
+    corpus_key: Mapped[str] = mapped_column(String(64))
+    chunk_key: Mapped[str] = mapped_column(String(500))
+    source: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(500))
+    text: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))
