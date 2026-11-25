@@ -1,12 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.core.diff import compare
 from app.core.docs import generate_markdown
 from app.core.parser import ParsedSpec, SpecError, parse_spec
-from app.core.runner import run_tests
 from app.core.testgen import generate_tests
 from app.database import get_db
 from app.models import SpecVersion, TestRun
@@ -56,18 +54,24 @@ def get_tests(version_id: int, db: Session = Depends(get_db)) -> list[dict]:
     return [case.to_dict() for case in generate_tests(_parsed(_version_or_404(db, version_id)))]
 
 
-@router.post("/versions/{version_id}/runs", response_model=RunOut, status_code=status.HTTP_201_CREATED)
-def create_run(version_id: int, payload: RunCreate, db: Session = Depends(get_db)) -> TestRun:
+@router.post("/versions/{version_id}/runs", response_model=RunOut, status_code=status.HTTP_202_ACCEPTED)
+def create_run(version_id: int, payload: RunCreate, response: Response, db: Session = Depends(get_db)) -> TestRun:
+    """Queue a test run. A background worker executes it; poll ``GET /runs/{id}`` for progress."""
     version = _version_or_404(db, version_id)
-    cases = generate_tests(_parsed(version))
-    if payload.categories:
-        cases = [c for c in cases if c.category in payload.categories]
-    report = run_tests(cases, str(payload.base_url).rstrip("/"), timeout=settings.runner_timeout_seconds)
-    run = TestRun(spec_version_id=version.id, base_url=report["base_url"], total=report["total"],
-                  passed=report["passed"], results=report["results"])
+    run = TestRun(spec_version_id=version.id, base_url=str(payload.base_url).rstrip("/"),
+                  categories=payload.categories, status="queued", results=[])
     db.add(run)
     db.commit()
     db.refresh(run)
+    response.headers["Location"] = f"/runs/{run.id}"
+    return run
+
+
+@router.get("/runs/{run_id}", response_model=RunOut)
+def get_run(run_id: int, db: Session = Depends(get_db)) -> TestRun:
+    run = db.get(TestRun, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Test run not found")
     return run
 
 

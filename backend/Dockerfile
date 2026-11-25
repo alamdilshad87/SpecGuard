@@ -1,10 +1,13 @@
+# syntax=docker/dockerfile:1
 FROM python:3.12-slim
 
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# The pip cache mount keeps downloaded wheels between builds, so a retry after a dropped
+# connection resumes instead of starting over; timeout/retries help on slow links.
+RUN --mount=type=cache,target=/root/.cache/pip pip install --default-timeout=120 --retries 10 -r requirements.txt
 
 # Bake the embedding model into the image so the API starts fast and works offline.
 ENV SPECGUARD_EMBEDDING_CACHE_DIR=/opt/models

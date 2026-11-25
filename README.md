@@ -24,7 +24,7 @@ When an API changes, the question is always the same: *will this break my client
 | Docs | Markdown grouped by tag, field tables with constraints, example payloads, `curl` snippets, downloadable from the UI |
 | Diff | Removed operations/parameters/responses, type changes, new required params or fields, tightened `min`/`max`/`length` constraints, enum changes, content-type changes, deprecations |
 | Test generation | Valid requests, missing required params/fields, wrong types, enum violations, min/max and length boundaries |
-| Runner | Executes cases over HTTP with timeouts, stores every run in PostgreSQL with status, timing and response excerpt |
+| Runner | Test runs are queued and executed by background workers (PostgreSQL `SKIP LOCKED` queue, crash recovery, retries); each case is sent over HTTP with timeouts and stored with status, timing and response excerpt |
 | Lint | Undeclared or unused path params, path params not marked required, duplicate `operationId`s, missing or non-2xx-only responses, unresolvable `$ref`s, bodies on `GET`/`DELETE` |
 | Drift detection | Scans uploaded source (files or a `.zip`) for FastAPI/Flask routes via Python's `ast`, Express-style JS/TS routes via regex, and ASP.NET Core controllers and minimal APIs via Roslyn, then matches them to spec operations by path shape (`/books/{book_id}` = `/books/{bookId}`) |
 | C# scanner (.NET) | Separate .NET 10 service using Roslyn syntax trees: `[Route]`/`[Http*]`/`[AcceptVerbs]` attributes, `[controller]`/`[action]` tokens, `~/` overrides, route constraints, `MapGroup` prefixes, XML doc summaries |
@@ -107,7 +107,8 @@ Create a project, upload `examples/bookstore-v1.yaml` and `bookstore-v2.yaml`, t
 | `GET` | `/versions/{id}` | Version details and operations |
 | `GET` | `/versions/{id}/docs` | Generated Markdown docs |
 | `GET` | `/versions/{id}/tests` | Generated test cases |
-| `POST` | `/versions/{id}/runs` | Run tests against `base_url` |
+| `POST` | `/versions/{id}/runs` | Queue a test run against `base_url`; returns `202` and a `Location` header |
+| `GET` | `/runs/{id}` | Run status (`queued` / `running` / `succeeded` / `failed`) and results |
 | `GET` | `/versions/{id}/runs` | Past runs |
 | `GET` | `/diff?from={id}&to={id}` | Breaking-change report between two stored versions |
 | `POST` | `/analyze/diff` | Stateless diff of two raw specs |
@@ -192,6 +193,22 @@ cd scanner-dotnet && dotnet test     # .NET scanner (unit + WebApplicationFactor
 ```
 
 The runner tests use an `httpx.MockTransport` implementation of the bookstore API, so the generated expectations are checked against a server that actually follows the spec. CI runs the backend tests, the .NET scanner tests and the frontend build on every push.
+
+### Background test runs
+
+`POST /versions/{id}/runs` only records a `queued` run and returns `202 Accepted`; a worker
+process (`python -m app.worker`, the `worker` service in Compose) executes it. The UI polls
+`GET /runs/{id}` until the run finishes.
+
+The queue is the `test_runs` table itself. A worker claims the oldest queued run with
+`SELECT … FOR UPDATE SKIP LOCKED`, so several workers can poll the same table without ever
+taking the same job (`docker compose up --scale worker=3`), and no separate broker is needed.
+If a worker dies mid-run, the job stays `running`; workers requeue jobs that have been running
+for longer than `SPECGUARD_WORKER_STALE_AFTER_SECONDS` (default 600) and mark them `failed`
+after `SPECGUARD_WORKER_MAX_ATTEMPTS` (default 3).
+
+Trade-off: polling every `SPECGUARD_WORKER_POLL_SECONDS` (default 1) is simple and fine at this
+scale; PostgreSQL `LISTEN/NOTIFY` or a dedicated broker would cut latency for high volumes.
 
 ### Database migrations
 

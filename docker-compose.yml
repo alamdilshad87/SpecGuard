@@ -15,6 +15,7 @@ services:
 
   api:
     build: ./backend
+    image: specguard-backend:local
     environment:
       SPECGUARD_DATABASE_URL: postgresql+psycopg2://specguard:specguard@db:5432/specguard
       SPECGUARD_CORS_ORIGINS: '["http://localhost:5173"]'
@@ -31,6 +32,19 @@ services:
         condition: service_healthy
       scanner:
         condition: service_started
+
+  # Executes queued test runs. Same image as the API; scale with `--scale worker=3`.
+  worker:
+    image: specguard-backend:local  # reuses the API image built above
+    pull_policy: never
+    command: ["python", "-m", "app.worker"]
+    environment:
+      SPECGUARD_DATABASE_URL: postgresql+psycopg2://specguard:specguard@db:5432/specguard
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started  # the API container applies migrations on start-up
 
   scanner:
     build: ./scanner-dotnet

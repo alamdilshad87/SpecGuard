@@ -15,8 +15,7 @@ from app import models  # noqa: F401
 from app.database import Base
 from app.migrate import alembic_config, compare_type, register_vector_type, upgrade
 
-LEGACY_TABLES = ("projects", "spec_versions", "test_runs", "code_scans")  # schema before migrations
-TABLES = {*LEGACY_TABLES, "retrieval_chunks"}
+TABLES = {"projects", "spec_versions", "test_runs", "code_scans", "retrieval_chunks"}
 POSTGRES_URL = os.environ.get("SPECGUARD_TEST_POSTGRES_URL")
 
 
@@ -64,15 +63,24 @@ def test_upgrade_matches_models_and_downgrade_removes_everything(db_url):
 
 def test_legacy_database_is_stamped_and_keeps_data(tmp_path):
     url = f"sqlite:///{tmp_path / 'legacy.db'}"
+    # Recreate a database from before migrations existed: the revision-0001 schema with no
+    # alembic_version table (that is what create_all used to produce).
+    command.upgrade(alembic_config(url), "0001")
     engine = create_engine(url)
-    # How the schema was created before migrations existed (only the original tables)
-    Base.metadata.create_all(engine, tables=[Base.metadata.tables[t] for t in LEGACY_TABLES])
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE alembic_version"))
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO projects (name, created_at) VALUES ('Kept', CURRENT_TIMESTAMP)"))
+        conn.execute(text("INSERT INTO spec_versions (project_id, label, title, openapi, operation_count, raw, created_at) "
+                          "VALUES (1, 'v1', 'T', '3.0.3', 0, '', CURRENT_TIMESTAMP)"))
+        conn.execute(text("INSERT INTO test_runs (spec_version_id, base_url, total, passed, results, created_at) "
+                          "VALUES (1, 'http://x', 2, 2, '[]', CURRENT_TIMESTAMP)"))
 
     upgrade(url)
 
     with engine.connect() as conn:
         assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() is not None
         assert conn.execute(text("SELECT name FROM projects")).scalar() == "Kept"
+        # Runs from before the queue were synchronous and finished: backfilled as succeeded.
+        assert conn.execute(text("SELECT status, attempts FROM test_runs")).one() == ("succeeded", 0)
     engine.dispose()

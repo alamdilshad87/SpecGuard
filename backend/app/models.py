@@ -43,15 +43,29 @@ class SpecVersion(Base):
 
 
 class TestRun(Base):
+    """A test run, which doubles as a job in the background queue.
+
+    Lifecycle: queued -> running -> succeeded | failed. Workers claim queued rows with
+    ``SELECT ... FOR UPDATE SKIP LOCKED`` (see app/worker.py).
+    """
+
     __tablename__ = "test_runs"
+    __table_args__ = (Index("ix_test_runs_status_created", "status", "created_at"),)
+    __test__ = False  # not a pytest test class, despite the name
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     spec_version_id: Mapped[int] = mapped_column(ForeignKey("spec_versions.id", ondelete="CASCADE"), index=True)
     base_url: Mapped[str] = mapped_column(String(500))
-    total: Mapped[int] = mapped_column(Integer)
-    passed: Mapped[int] = mapped_column(Integer)
-    results: Mapped[list] = mapped_column(JSON)
+    categories: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    total: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    passed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    results: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     spec_version: Mapped[SpecVersion] = relationship(back_populates="runs")
 
