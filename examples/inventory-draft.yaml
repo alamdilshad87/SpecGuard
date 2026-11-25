@@ -1,0 +1,66 @@
+# Deliberately flawed draft spec for trying out the linter (expect 6 errors and 5 warnings).
+openapi: 3.0.3
+info:
+  title: Inventory API
+  version: 0.3.0-draft
+paths:
+  /items:
+    get:
+      operationId: listItems
+      summary: List stock items
+      responses:
+        "200":
+          description: Items in stock
+    post:
+      operationId: createItem
+      summary: Add a stock item
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sku: { type: string }
+                quantity: { type: integer }
+      responses:
+        "201":
+          description: Created
+  /items/{itemId}:
+    get:
+      operationId: getItem
+      summary: Get one item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The item
+    delete:
+      operationId: getItem
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "404":
+          description: Not found
+  /warehouses/{warehouseId}/stock:
+    get:
+      parameters:
+        - name: warehouseId
+          in: path
+          schema: { type: string }
+      responses:
+        "200":
+          description: Stock levels for one warehouse
+    put:
+      operationId: setStock
+      summary: Replace stock levels
+      parameters:
+        - name: warehouseId
+          in: path
+          required: true
+          schema: { type: string }
+      responses: {}

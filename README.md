@@ -87,14 +87,29 @@ cd examples
 uvicorn mock_bookstore:app --port 9000
 ```
 
-Create a project, upload `examples/bookstore-v1.yaml` and `bookstore-v2.yaml`, then:
+Create a project, upload `examples/bookstore-v1.yaml` and `bookstore-v2.yaml`, then work through the tabs.
 
-- **Docs**: generated reference for the selected version
-- **Breaking changes**: v1 → v2 reports 9 breaking changes (removed `DELETE`, new required `storeId`, `limit` max lowered, `bookId` type change, …)
-- **Tests**: run the 25 generated cases for v1 against `http://localhost:9000`
-- **Drift**: scan `examples/mock_bookstore.py` (FastAPI) or `examples/BookstoreApi/BooksController.cs` (ASP.NET Core) against v2: the `DELETE` book route is undocumented and `GET /authors` is not implemented
+**Docs**: generated reference for the selected version (shown here for the 34-operation `examples/shop-api.yaml`).
+
+![Generated docs](docs/screenshots/docs.png)
+
+**Lint**: structural problems in a spec. `examples/inventory-draft.yaml` is a deliberately sloppy draft with 6 errors and 5 warnings.
+
+![Lint report](docs/screenshots/lint.png)
+
+**Tests**: run the 25 generated cases for v1 against `http://localhost:9000`. The run is queued and executed by a background worker; the UI polls until it finishes.
 
 ![Test run](docs/screenshots/tests.png)
+
+**Breaking changes**: v1 → v2 reports 9 breaking changes (removed `DELETE`, new required `storeId`, `limit` max lowered, `bookId` type change, …).
+
+**Code drift**: scan `examples/mock_bookstore.py` (FastAPI) or `examples/BookstoreApi/BooksController.cs` (ASP.NET Core, via the Roslyn scanner) against v2: the `DELETE` book route is undocumented and `GET /authors` is not implemented.
+
+![Code drift report](docs/screenshots/drift.png)
+
+**Ask**: questions answered from the spec and the latest code scan. A paraphrase with no words in common with the spec ("get rid of a title from the catalogue") still finds `DELETE /books/{bookId}` through semantic search.
+
+![Question answering](docs/screenshots/ask.png)
 
 ## API
 
